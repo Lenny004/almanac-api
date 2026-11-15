@@ -43,8 +43,23 @@ final class WikipediaEventsSource implements BriefingSourceInterface
             throw new SourceUnavailableException('Wikipedia On This Day returned an unexpected payload.');
         }
 
+        // "On This Day" lists events from every year; keep only those up to the requested year.
+        $requestedYear = (int) $date->format('Y');
+
+        $pastEvents = array_filter(
+            $data['events'],
+            static function (mixed $event) use ($requestedYear): bool {
+                // Skip malformed entries that have no year.
+                if (!\is_array($event) || !isset($event['year'])) {
+                    return false;
+                }
+
+                return (int) $event['year'] <= $requestedYear;
+            },
+        );
+
         $events = [];
-        foreach (\array_slice($data['events'], 0, self::MAX_EVENTS) as $event) {
+        foreach (\array_slice($pastEvents, 0, self::MAX_EVENTS) as $event) {
             $events[] = [
                 'year' => $event['year'] ?? null,
                 'text' => $event['text'] ?? null,

@@ -15,6 +15,11 @@ final class ApodSource implements BriefingSourceInterface
 {
     private const URL = 'https://api.nasa.gov/planetary/apod';
 
+    /**
+     * Asset NASA serves instead of the real picture when APOD is degraded.
+     */
+    private const PLACEHOLDER_MARKER = 'nasa-logo';
+
     public function __construct(
         private readonly HttpClientInterface $httpClient,
         #[Autowire(env: 'NASA_API_KEY')]
@@ -44,6 +49,12 @@ final class ApodSource implements BriefingSourceInterface
 
         if (!isset($data['title'], $data['url'])) {
             throw new SourceUnavailableException('NASA APOD returned an unexpected payload.');
+        }
+
+        // A 200 with the generic NASA logo is not a real picture: treat it as unavailable
+        // so it is reported as missing and refetched later, never cached as valid data.
+        if (str_contains((string) $data['url'], self::PLACEHOLDER_MARKER)) {
+            throw new SourceUnavailableException('NASA APOD returned a placeholder instead of the picture of the day.');
         }
 
         return [
