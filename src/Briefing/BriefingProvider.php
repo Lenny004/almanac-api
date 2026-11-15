@@ -12,7 +12,7 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * Refresh policy (all dates compared in UTC):
  * - past date, complete: served from cache, never refetched;
- * - past date with missing sources: refetched to fill the gaps;
+ * - past date with missing sources: refetched to fill the gaps, at most once per REFRESH_TTL;
  * - today or future date: refetched when the cached copy is older than REFRESH_TTL.
  */
 final class BriefingProvider
@@ -76,24 +76,27 @@ final class BriefingProvider
     /**
      * Decides whether a cached briefing must be fetched again.
      *
-     * - Past date: refetch only if some source was missing.
-     * - Today or future date: refetch if the copy is older than REFRESH_TTL.
+     * - Past date, complete: never (the past does not change).
+     * - Past date with missing sources: only once REFRESH_TTL has passed,
+     *   so a broken upstream is retried at most once per hour, not on every request.
+     * - Today or future date: once REFRESH_TTL has passed.
      *
-     * @param Briefing $briefing the cached row
-     * @param \DateTimeImmutable $day the requested day at 00:00 UTC
-     * @param \DateTimeImmutable $now the current moment in UTC
+     * @param Briefing           $briefing the cached row
+     * @param \DateTimeImmutable $day      the requested day at 00:00 UTC
+     * @param \DateTimeImmutable $now      the current moment in UTC
+     *
      * @return bool true when the sources must be queried again
      */
     private function needsRefresh(Briefing $briefing, \DateTimeImmutable $day, \DateTimeImmutable $now): bool
     {
         $today = new \DateTimeImmutable($now->format('Y-m-d'), $now->getTimezone());
+        $freshUntil = $briefing->getFetchedAt()->add(new \DateInterval(self::REFRESH_TTL));
+        $isStale = $now > $freshUntil;
 
         if ($day < $today) {
-            return [] !== $briefing->getMissing();
+            return [] !== $briefing->getMissing() && $isStale;
         }
 
-        $freshUntil = $briefing->getFetchedAt()->add(new \DateInterval(self::REFRESH_TTL));
-
-        return $now > $freshUntil;
+        return $isStale;
     }
 }
