@@ -140,10 +140,10 @@ curl -X POST http://localhost:8000/api/bookmarks \
 ```
 
 ```json
-{"id":78,"type":"event","date":"2020-11-10","discoveryKey":"event:11-10:2020:1937dc68","title":"Armenia and Azerbaijan sign a ceasefire agreement","url":"https://en.wikipedia.org/wiki/Armenia","createdAt":"2026-11-16T15:08:34+00:00"}
+{"id":1,"type":"event","date":"2020-11-10","discoveryKey":"event:11-10:2020:1937dc68","title":"Armenia and Azerbaijan sign a ceasefire agreement","url":"https://en.wikipedia.org/wiki/Armenia","createdAt":"2026-11-16T15:08:34+00:00"}
 ```
 
-The answer is `201 Created` with a `Location: /api/bookmarks/78` header.
+The answer is `201 Created` with a `Location: /api/bookmarks/1` header. On a fresh database the first bookmark gets id `1`; in the next examples, use the `id` from your own responses.
 
 A person:
 
@@ -172,12 +172,14 @@ curl "http://localhost:8000/api/bookmarks?page=1" -H "Authorization: Bearer $TOK
 ```
 
 ```json
-{"items":[{"id":80,"type":"apod","date":"2020-11-10","discoveryKey":"apod:2020-11-10","title":"Astronomy Picture of the Day, 2020-11-10","url":null,"createdAt":"2026-11-16T15:08:35+00:00"}],"page":1,"perPage":10,"total":1,"totalPages":1}
+{"items":[{"id":3,"type":"apod","date":"2020-11-10","discoveryKey":"apod:2020-11-10","title":"Astronomy Picture of the Day, 2020-11-10","url":null,"createdAt":"2026-11-16T15:08:35+00:00"}, ...],"page":1,"perPage":10,"total":3,"totalPages":1}
 ```
 
+The newest bookmarks come first. The output above is shortened to the first item.
+
 ```bash
-curl http://localhost:8000/api/bookmarks/80 -H "Authorization: Bearer $TOKEN"
-curl -X DELETE http://localhost:8000/api/bookmarks/80 -H "Authorization: Bearer $TOKEN"   # 204 No Content
+curl http://localhost:8000/api/bookmarks/3 -H "Authorization: Bearer $TOKEN"
+curl -X DELETE http://localhost:8000/api/bookmarks/3 -H "Authorization: Bearer $TOKEN"   # 204 No Content
 ```
 
 A bookmark of another user answers `404`, the same as a bookmark that does not exist, so ids of other users are never revealed.
@@ -255,7 +257,7 @@ Validation errors also list each field:
 
 | Status | When |
 | --- | --- |
-| 400 | Invalid or out-of-range date, invalid `page` |
+| 400 | Invalid or out-of-range date, invalid `page`, or a bookmark body that is not valid JSON |
 | 401 | Missing or invalid token (also on a public briefing if an invalid token is sent); includes `WWW-Authenticate: Bearer` |
 | 404 | Unknown route, or a bookmark that is not yours |
 | 405 | Wrong HTTP method |
@@ -311,7 +313,7 @@ The `discovery_key` identifies a discovery in a stable way:
 | --- | --- | --- |
 | `event` | `event:MM-DD:<eventYear>:<hash of title>` | An event repeats on the same day every year, and several events can share a year |
 | `person` | `person:MM-DD:<hash of title>` | A person is born on one day and month |
-| `apod`, `weather` | `apod:YYYY-MM-DD` | One per date |
+| `apod`, `weather` | `apod:YYYY-MM-DD` or `weather:YYYY-MM-DD` | One per date |
 | `year` | `year:YYYY` | The same for every date of that year |
 
 The hash is the first 8 characters of the SHA-1 of the trimmed title.
