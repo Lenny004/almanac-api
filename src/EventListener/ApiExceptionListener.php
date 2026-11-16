@@ -10,6 +10,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\ExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\Validator\Exception\ValidationFailedException;
 
 /**
  * Turns every exception thrown under /api into an RFC 7807 JSON response.
@@ -28,6 +29,7 @@ final class ApiExceptionListener
         Response::HTTP_FORBIDDEN => 'You are not allowed to access this resource.',
         Response::HTTP_NOT_FOUND => 'The requested resource was not found.',
         Response::HTTP_METHOD_NOT_ALLOWED => 'This HTTP method is not allowed for this resource.',
+        Response::HTTP_UNPROCESSABLE_ENTITY => 'The request body is invalid.',
     ];
 
     /**
@@ -52,12 +54,13 @@ final class ApiExceptionListener
         $exception = $event->getThrowable();
 
         if ($exception instanceof HttpExceptionInterface) {
-            // Known HTTP errors (401, 404, 405...): keep their status and headers (e.g. Allow: GET).
+            // Known HTTP errors (401, 404, 409, 422...): keep their status and headers (e.g. Allow: GET).
             $status = $exception->getStatusCode();
             $response = $this->problems->create(
                 $status,
                 Response::$statusTexts[$status] ?? 'Error',
                 self::DETAILS[$status] ?? ('' !== $exception->getMessage() ? $exception->getMessage() : null),
+                $this->violationsOf($exception),
             );
             $response->headers->add($exception->getHeaders());
         } else {
@@ -75,5 +78,30 @@ final class ApiExceptionListener
         }
 
         $event->setResponse($response);
+    }
+
+    /**
+     * Lists the invalid fields when a request body failed validation (#[MapRequestPayload]).
+     *
+     * @param \Throwable $exception the HTTP exception thrown by Symfony
+     * @return array<string, mixed> a "violations" member, or nothing when the error is not a validation one
+     */
+    private function violationsOf(\Throwable $exception): array
+    {
+        $validationError = $exception->getPrevious();
+
+        if (!$validationError instanceof ValidationFailedException) {
+            return [];
+        }
+
+        $violations = [];
+        foreach ($validationError->getViolations() as $violation) {
+            $violations[] = [
+                'field' => $violation->getPropertyPath(),
+                'message' => (string) $violation->getMessage(),
+            ];
+        }
+
+        return ['violations' => $violations];
     }
 }
