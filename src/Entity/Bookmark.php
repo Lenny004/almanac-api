@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Repository\BookmarkRepository;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 
@@ -13,7 +14,7 @@ use Doctrine\ORM\Mapping as ORM;
  * The discovery key identifies the discovery itself, so the same user
  * cannot bookmark it twice while different users can.
  */
-#[ORM\Entity]
+#[ORM\Entity(repositoryClass: BookmarkRepository::class)]
 #[ORM\Table(name: 'bookmark')]
 #[ORM\UniqueConstraint(name: 'uniq_bookmark_user_discovery', columns: ['user_id', 'discovery_key'])]
 #[ORM\Index(name: 'idx_bookmark_user_created', columns: ['user_id', 'created_at'])]
