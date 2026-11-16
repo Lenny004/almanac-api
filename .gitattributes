@@ -1,0 +1,3 @@
+# Always check out text files with LF endings, also on Windows, so the container
+# and PHP-CS-Fixer see the same files on every machine.
+* text=auto eol=lf

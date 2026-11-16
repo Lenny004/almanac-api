@@ -11,5 +11,9 @@ framework:
 when@test:
     framework:
         test: true
+        # Tests trigger 404, 409 and 422 on purpose: log them as debug so they do not flood the test output.
+        exceptions:
+            Symfony\Component\HttpKernel\Exception\HttpExceptionInterface:
+                log_level: debug
         session:
             storage_factory_id: session.storage.factory.mock_file

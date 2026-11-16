@@ -25,9 +25,9 @@ final class BriefingController extends AbstractController
     private const MIN_DATE = BriefingDateRange::MIN_DATE;
 
     /**
-     * @param BriefingProvider       $provider  returns cached or freshly fetched briefings
-     * @param ValidatorInterface     $validator Symfony Validator, checks the date input
-     * @param ProblemResponseFactory $problems  builds RFC 7807 error responses
+     * @param BriefingProvider $provider returns cached or freshly fetched briefings
+     * @param ValidatorInterface $validator Symfony Validator, checks the date input
+     * @param ProblemResponseFactory $problems builds RFC 7807 error responses
      */
     public function __construct(
         private readonly BriefingProvider $provider,
@@ -43,7 +43,6 @@ final class BriefingController extends AbstractController
      * never reaches the sources nor the cache table.
      *
      * @param string $date the date taken from the URL
-     *
      * @return JsonResponse the briefing, or an RFC 7807 problem on invalid input
      */
     #[Route('/api/briefings/{date}', name: 'briefing_show', methods: ['GET'])]
@@ -62,14 +61,14 @@ final class BriefingController extends AbstractController
         }
 
         $utc = new \DateTimeZone('UTC');
-        $day = new \DateTimeImmutable($date, $utc);
-        $max = BriefingDateRange::maxDate();
+        $requestedDate = new \DateTimeImmutable($date, $utc);
+        $latestDate = BriefingDateRange::maxDate();
 
         // 2. Allowed range: from the first APOD picture to the forecast limit.
-        $violations = $this->validator->validate($day, new Assert\Range(
-            notInRangeMessage: \sprintf('The date must be between %s and %s.', self::MIN_DATE, $max),
+        $violations = $this->validator->validate($requestedDate, new Assert\Range(
+            notInRangeMessage: \sprintf('The date must be between %s and %s.', self::MIN_DATE, $latestDate),
             min: self::MIN_DATE,
-            max: $max,
+            max: $latestDate,
         ));
         if (\count($violations) > 0) {
             return $this->problems->create(
@@ -80,7 +79,7 @@ final class BriefingController extends AbstractController
         }
 
         // 3. Valid date: serve it from the cache or the sources.
-        $briefing = $this->provider->get($day);
+        $briefing = $this->provider->get($requestedDate);
 
         return $this->json([
             'date' => $briefing->getDate()->format('Y-m-d'),

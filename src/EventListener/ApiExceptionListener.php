@@ -56,10 +56,17 @@ final class ApiExceptionListener
         if ($exception instanceof HttpExceptionInterface) {
             // Known HTTP errors (401, 404, 409, 422...): keep their status and headers (e.g. Allow: GET).
             $status = $exception->getStatusCode();
+
+            // A fixed message when there is one, otherwise the exception's own message, if any.
+            $detail = self::DETAILS[$status] ?? null;
+            if (null === $detail && '' !== $exception->getMessage()) {
+                $detail = $exception->getMessage();
+            }
+
             $response = $this->problems->create(
                 $status,
                 Response::$statusTexts[$status] ?? 'Error',
-                self::DETAILS[$status] ?? ('' !== $exception->getMessage() ? $exception->getMessage() : null),
+                $detail,
                 $this->violationsOf($exception),
             );
             $response->headers->add($exception->getHeaders());

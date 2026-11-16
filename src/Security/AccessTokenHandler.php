@@ -17,6 +17,9 @@ use Symfony\Component\Security\Http\Authenticator\Passport\Badge\UserBadge;
  */
 final class AccessTokenHandler implements AccessTokenHandlerInterface
 {
+    /**
+     * @param EntityManagerInterface $entityManager Doctrine service that reads the user table
+     */
     public function __construct(
         private readonly EntityManagerInterface $entityManager,
     ) {
@@ -31,7 +34,11 @@ final class AccessTokenHandler implements AccessTokenHandlerInterface
      */
     public function getUserBadgeFrom(string $accessToken): UserBadge
     {
-        $user = $this->entityManager->getRepository(User::class)->findOneBy(['tokenHash' => User::hashToken($accessToken)]);
+        // Only the hash is stored, so the sent token is hashed the same way before the lookup.
+        $tokenHash = User::hashToken($accessToken);
+        $user = $this->entityManager
+            ->getRepository(User::class)
+            ->findOneBy(['tokenHash' => $tokenHash]);
 
         if (null === $user) {
             throw new BadCredentialsException('Invalid access token.');

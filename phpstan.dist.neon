@@ -1,0 +1,9 @@
+includes:
+    # Teaches PHPStan how Doctrine fills entities (e.g. generated ids).
+    - vendor/phpstan/phpstan-doctrine/extension.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+        - tests

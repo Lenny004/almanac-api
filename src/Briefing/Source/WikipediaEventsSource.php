@@ -15,6 +15,19 @@ final class WikipediaEventsSource implements BriefingSourceInterface
     private const URL = 'https://en.wikipedia.org/api/rest_v1/feed/onthisday/events/%s/%s';
     private const MAX_EVENTS = 5;
 
+    /**
+     * Seconds to wait for the first byte of the answer.
+     */
+    private const REQUEST_TIMEOUT_SECONDS = 5;
+
+    /**
+     * Seconds the whole request may take, download included.
+     */
+    private const MAX_DURATION_SECONDS = 10;
+
+    /**
+     * @param HttpClientInterface $httpClient Symfony HTTP client used to call Wikipedia
+     */
     public function __construct(
         private readonly HttpClientInterface $httpClient,
     ) {
@@ -25,21 +38,28 @@ final class WikipediaEventsSource implements BriefingSourceInterface
         return 'events';
     }
 
+    /**
+     * Fetches the events of the same day and month, up to the requested year.
+     *
+     * @return array<string, mixed>
+     * @throws SourceUnavailableException when Wikipedia fails or returns an unexpected payload
+     */
     public function fetch(\DateTimeImmutable $date): array
     {
-        $url = sprintf(self::URL, $date->format('m'), $date->format('d'));
+        $url = \sprintf(self::URL, $date->format('m'), $date->format('d'));
 
         try {
-            $data = $this->httpClient->request('GET', $url, [
+            $eventsPayload = $this->httpClient->request('GET', $url, [
+                // Wikimedia asks every client to identify itself.
                 'headers' => ['User-Agent' => 'AlmanacAPI/1.0 (technical test project)'],
-                'timeout' => 5,
-                'max_duration' => 10,
+                'timeout' => self::REQUEST_TIMEOUT_SECONDS,
+                'max_duration' => self::MAX_DURATION_SECONDS,
             ])->toArray();
-        } catch (ExceptionInterface $e) {
-            throw new SourceUnavailableException('Wikipedia On This Day request failed: '.$e->getMessage(), 0, $e);
+        } catch (ExceptionInterface $exception) {
+            throw new SourceUnavailableException('Wikipedia On This Day request failed: '.$exception->getMessage(), 0, $exception);
         }
 
-        if (!isset($data['events']) || !\is_array($data['events'])) {
+        if (!isset($eventsPayload['events']) || !\is_array($eventsPayload['events'])) {
             throw new SourceUnavailableException('Wikipedia On This Day returned an unexpected payload.');
         }
 
@@ -47,7 +67,7 @@ final class WikipediaEventsSource implements BriefingSourceInterface
         $requestedYear = (int) $date->format('Y');
 
         $pastEvents = array_filter(
-            $data['events'],
+            $eventsPayload['events'],
             static function (mixed $event) use ($requestedYear): bool {
                 // Skip malformed entries that have no year.
                 if (!\is_array($event) || !isset($event['year'])) {

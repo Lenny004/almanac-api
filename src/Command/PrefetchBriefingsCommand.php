@@ -6,6 +6,7 @@ namespace App\Command;
 
 use App\Briefing\BriefingDateRange;
 use App\Briefing\BriefingProvider;
+use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -19,9 +20,11 @@ final class PrefetchBriefingsCommand
 {
     /**
      * @param BriefingProvider $provider returns cached briefings or fetches and stores new ones
+     * @param ManagerRegistry $doctrine resets the entity manager after a database error
      */
     public function __construct(
         private readonly BriefingProvider $provider,
+        private readonly ManagerRegistry $doctrine,
     ) {
     }
 
@@ -45,77 +48,83 @@ final class PrefetchBriefingsCommand
 
         $utc = new \DateTimeZone('UTC');
         // The end date is moved one day forward because DatePeriod excludes its end.
-        $days = new \DatePeriod(
+        $datePeriod = new \DatePeriod(
             new \DateTimeImmutable($from, $utc),
             new \DateInterval('P1D'),
             (new \DateTimeImmutable($to, $utc))->modify('+1 day'),
         );
 
-        $total = iterator_count($days);
+        $totalDates = iterator_count($datePeriod);
         $position = 0;
-        $complete = 0;
-        $partial = [];
-        $failed = [];
+        $completeDates = 0;
+        $partialDates = [];
+        $failedDates = [];
 
-        foreach ($days as $day) {
+        foreach ($datePeriod as $dateTime) {
             ++$position;
-            $date = $day->format('Y-m-d');
-            $prefix = \sprintf('[%d/%d] %s', $position, $total, $date);
+            $formattedDate = $dateTime->format('Y-m-d');
+            $prefix = \sprintf('[%d/%d] %s', $position, $totalDates, $formattedDate);
 
             // One broken day must not stop the whole range, so it is reported and skipped.
             try {
-                $missing = $this->provider->get($day)->getMissing();
+                $missingSources = $this->provider->get($dateTime)->getMissing();
             } catch (\Throwable $exception) {
-                $failed[] = $date;
+                $failedDates[] = $formattedDate;
                 $io->writeln(\sprintf('%s failed: %s', $prefix, $exception->getMessage()));
+                // A database error closes the entity manager; a new one lets the next days continue.
+                $this->doctrine->resetManager();
 
                 continue;
             }
 
-            if ([] === $missing) {
-                ++$complete;
+            if ([] === $missingSources) {
+                ++$completeDates;
                 $io->writeln($prefix.' complete');
 
                 continue;
             }
 
-            $partial[] = $date;
-            $io->writeln(\sprintf('%s missing: %s', $prefix, implode(', ', $missing)));
+            $partialDates[] = $formattedDate;
+            $io->writeln(\sprintf('%s missing: %s', $prefix, implode(', ', $missingSources)));
         }
 
-        $this->printSummary($io, $total, $complete, $partial, $failed);
+        $this->printSummary($io, $totalDates, $completeDates, $partialDates, $failedDates);
 
         // Missing sources still store a usable briefing, so only days that failed completely make the command fail.
-        return [] === $failed ? Command::SUCCESS : Command::FAILURE;
+        if ([] === $failedDates) {
+            return Command::SUCCESS;
+        }
+
+        return Command::FAILURE;
     }
 
     /**
      * Prints the final counts: success when every day is complete, warning for missing sources, error for failures.
      *
      * @param SymfonyStyle $io console input and output helpers
-     * @param int $total number of days in the range
-     * @param int $complete number of days with every source
-     * @param list<string> $partial dates stored with at least one missing source
-     * @param list<string> $failed dates that could not be fetched or stored at all
+     * @param int $totalDates number of days in the range
+     * @param int $completeDates number of days with every source
+     * @param list<string> $partialDates dates stored with at least one missing source
+     * @param list<string> $failedDates dates that could not be fetched or stored at all
      */
-    private function printSummary(SymfonyStyle $io, int $total, int $complete, array $partial, array $failed): void
+    private function printSummary(SymfonyStyle $io, int $totalDates, int $completeDates, array $partialDates, array $failedDates): void
     {
         $summary = \sprintf(
             'Processed %d day(s): %d complete, %d with missing sources, %d failed.',
-            $total,
-            $complete,
-            \count($partial),
-            \count($failed),
+            $totalDates,
+            $completeDates,
+            \count($partialDates),
+            \count($failedDates),
         );
 
-        if ([] !== $failed) {
-            $io->error([$summary, 'Failed dates: '.implode(', ', $failed)]);
+        if ([] !== $failedDates) {
+            $io->error([$summary, 'Failed dates: '.implode(', ', $failedDates)]);
 
             return;
         }
 
-        if ([] !== $partial) {
-            $io->warning([$summary, 'Dates with missing sources: '.implode(', ', $partial)]);
+        if ([] !== $partialDates) {
+            $io->warning([$summary, 'Dates with missing sources: '.implode(', ', $partialDates)]);
 
             return;
         }
@@ -154,8 +163,13 @@ final class PrefetchBriefingsCommand
      */
     private function isRealDate(string $date): bool
     {
-        $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
 
-        return false !== $parsed && $parsed->format('Y-m-d') === $date;
+        if (false === $parsedDate) {
+            return false;
+        }
+
+        // "2020-02-31" is parsed as March 2nd, so the date must come back unchanged.
+        return $parsedDate->format('Y-m-d') === $date;
     }
 }

@@ -16,7 +16,8 @@ use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 final class BriefingAggregator
 {
     /**
-     * @param iterable<BriefingSourceInterface> $sources
+     * @param iterable<BriefingSourceInterface> $sources every class tagged as a briefing source
+     * @param LoggerInterface $logger records why a source failed
      */
     public function __construct(
         #[AutowireIterator('app.briefing_source')]
@@ -26,38 +27,46 @@ final class BriefingAggregator
     }
 
     /**
+     * Asks the sources for their data; a failing source is listed in "missing".
+     *
+     * @param \DateTimeImmutable $date the requested day
+     * @param list<string>|null $onlySources names of the sources to ask, or null to ask all of them
      * @return array{date: string, sources: array<string, array<string, mixed>>, missing: list<string>}
      */
-    public function aggregate(\DateTimeImmutable $date): array
+    public function aggregate(\DateTimeImmutable $date, ?array $onlySources = null): array
     {
-        $data = [];
+        $sourceData = [];
         $missing = [];
 
         foreach ($this->sources as $source) {
+            if (null !== $onlySources && !\in_array($source->getName(), $onlySources, true)) {
+                continue;
+            }
+
             try {
-                $data[$source->getName()] = $source->fetch($date);
-            } catch (SourceUnavailableException $e) {
+                $sourceData[$source->getName()] = $source->fetch($date);
+            } catch (SourceUnavailableException $exception) {
                 // Expected failure: upstream down, timeout or bad payload.
                 $missing[] = $source->getName();
                 $this->logger->warning('Briefing source unavailable.', [
                     'source' => $source->getName(),
                     'date' => $date->format('Y-m-d'),
-                    'error' => $e->getMessage(),
+                    'error' => $exception->getMessage(),
                 ]);
-            } catch (\Throwable $e) {
+            } catch (\Throwable $exception) {
                 // Unexpected failure (a bug or an odd payload): still never break the briefing.
                 $missing[] = $source->getName();
                 $this->logger->error('Briefing source failed unexpectedly.', [
                     'source' => $source->getName(),
                     'date' => $date->format('Y-m-d'),
-                    'exception' => $e,
+                    'exception' => $exception,
                 ]);
             }
         }
 
         return [
             'date' => $date->format('Y-m-d'),
-            'sources' => $data,
+            'sources' => $sourceData,
             'missing' => $missing,
         ];
     }

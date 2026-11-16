@@ -20,4 +20,5 @@ COPY . .
 RUN composer dump-autoload --optimize
 
 EXPOSE 8000
-CMD ["php", "-S", "0.0.0.0:8000", "-t", "public"]
+# Runs the migrations, then the PHP built-in web server (see docker/start.sh)
+CMD ["sh", "docker/start.sh"]

@@ -10,8 +10,8 @@ use Doctrine\ORM\Mapping as ORM;
 /**
  * Cached aggregated briefing for a single date.
  *
- * Past dates are stored once and never refetched; today and future dates
- * can be refreshed through refresh().
+ * Stored sources of a past date are never fetched again (only its missing ones);
+ * today and future dates can be refreshed through refresh().
  */
 #[ORM\Entity]
 #[ORM\Table(name: 'briefing')]
@@ -26,10 +26,10 @@ class Briefing
     /**
      * Creates a cached briefing from the aggregator result.
      *
-     * @param \DateTimeImmutable                  $date      the day this briefing describes
-     * @param array<string, array<string, mixed>> $sources   data returned by each available source, keyed by source name
-     * @param list<string>                        $missing   names of the sources that failed
-     * @param \DateTimeImmutable                  $fetchedAt when the sources were queried
+     * @param \DateTimeImmutable $date the day this briefing describes
+     * @param array<string, array<string, mixed>> $sources data returned by each available source, keyed by source name
+     * @param list<string> $missing names of the sources that failed
+     * @param \DateTimeImmutable $fetchedAt when the sources were queried
      */
     public function __construct(
         #[ORM\Column(type: Types::DATE_IMMUTABLE)]
@@ -88,11 +88,11 @@ class Briefing
     }
 
     /**
-     * Replaces the cached data after a refresh (used for today/future dates only).
+     * Replaces the cached data after a refresh, or after the missing sources of a past date were asked again.
      *
-     * @param array<string, array<string, mixed>> $sources   fresh data of each available source
-     * @param list<string>                        $missing   names of the sources that failed
-     * @param \DateTimeImmutable                  $fetchedAt when the sources were queried again
+     * @param array<string, array<string, mixed>> $sources fresh data of each available source
+     * @param list<string> $missing names of the sources that failed
+     * @param \DateTimeImmutable $fetchedAt when the sources were queried again
      */
     public function refresh(array $sources, array $missing, \DateTimeImmutable $fetchedAt): void
     {

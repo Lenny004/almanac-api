@@ -40,6 +40,22 @@ final class BookmarkControllerTest extends WebTestCase
         self::assertResponseHeaderSame('Location', '/api/bookmarks/'.$body['id']);
     }
 
+    public function testAPersonIsBookmarkedWithAKeyBuiltFromTheDayAndTheBirthText(): void
+    {
+        $token = $this->createUser('ana@example.com');
+        $payload = ['type' => 'person', 'date' => '2020-11-10', 'title' => 'A fake person, writer'];
+
+        $this->postBookmark($token, $payload);
+
+        self::assertResponseStatusCodeSame(201);
+        $expectedKey = 'person:11-10:'.substr(sha1('A fake person, writer'), 0, 8);
+        self::assertSame($expectedKey, $this->jsonBody()['discoveryKey']);
+
+        // The same person on the same day is a duplicate.
+        $this->postBookmark($token, $payload);
+        self::assertResponseStatusCodeSame(409);
+    }
+
     public function testTheSameDiscoveryCannotBeBookmarkedTwiceByTheSameUser(): void
     {
         $token = $this->createUser('ana@example.com');
@@ -88,8 +104,8 @@ final class BookmarkControllerTest extends WebTestCase
         $beto = $this->createUser('beto@example.com');
 
         // 12 bookmarks on 12 different days, so page 1 has 10 items and page 2 has 2.
-        for ($day = 1; $day <= 12; ++$day) {
-            $this->postBookmark($ana, ['type' => 'apod', 'date' => \sprintf('2020-11-%02d', $day), 'title' => 'Day '.$day]);
+        for ($dayOfMonth = 1; $dayOfMonth <= 12; ++$dayOfMonth) {
+            $this->postBookmark($ana, ['type' => 'apod', 'date' => \sprintf('2020-11-%02d', $dayOfMonth), 'title' => 'Day '.$dayOfMonth]);
         }
         $this->postBookmark($beto, ['type' => 'apod', 'date' => '2020-11-01', 'title' => 'Beto picture']);
 

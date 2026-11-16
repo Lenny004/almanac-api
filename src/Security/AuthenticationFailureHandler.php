@@ -22,6 +22,7 @@ final class AuthenticationFailureHandler implements AuthenticationFailureHandler
 
     /**
      * Builds the 401 response sent when the token is missing a matching user.
+     *
      * @param Request $request the request that failed to authenticate
      * @param AuthenticationException $exception why authentication failed
      * @return Response a 401 problem+json response with a WWW-Authenticate header

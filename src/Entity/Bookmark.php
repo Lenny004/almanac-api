@@ -27,9 +27,9 @@ class Bookmark
 
     /**
      * @param User $user owner of the bookmark
-     * @param string $type kind of discovery: event, apod, year or weather
+     * @param string $type kind of discovery: event, person, apod, year or weather
      * @param \DateTimeImmutable $date date of the briefing the discovery comes from
-     * @param string $discoveryKey stable identifier of the discovery, e.g. "event:2020-11-13:1999"
+     * @param string $discoveryKey stable identifier of the discovery, e.g. "event:11-13:1999:3fa9c2d1" or "person:11-13:7b1e04aa"
      * @param string $title short text to show the bookmark
      * @param string|null $url link to the discovery, when there is one
      * @param \DateTimeImmutable $createdAt when the bookmark was saved

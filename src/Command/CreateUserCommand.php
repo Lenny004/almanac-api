@@ -34,9 +34,8 @@ final class CreateUserCommand
     /**
      * Runs the command: validate the e-mail, create the user, print the token.
      *
-     * @param SymfonyStyle $io    console helper to print formatted output
-     * @param string       $email e-mail of the new user
-     *
+     * @param SymfonyStyle $io console helper to print formatted output
+     * @param string $email e-mail of the new user
      * @return int Command::SUCCESS or Command::FAILURE
      */
     public function __invoke(
@@ -67,7 +66,6 @@ final class CreateUserCommand
      * Checks that the e-mail is valid and not used by another user.
      *
      * @param string $email the e-mail to check
-     *
      * @return string|null an error message, or null when the e-mail is fine
      */
     private function findEmailError(string $email): ?string
@@ -98,13 +96,14 @@ final class CreateUserCommand
     /**
      * Saves a new user, storing only the hash of its token.
      *
-     * @param string $email      e-mail of the new user
+     * @param string $email e-mail of the new user
      * @param string $plainToken the token that will be shown to the user
      */
     private function createUser(string $email, string $plainToken): void
     {
         $now = new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $user = new User($email, User::hashToken($plainToken), $now);
+        $tokenHash = User::hashToken($plainToken);
+        $user = new User($email, $tokenHash, $now);
 
         $this->entityManager->persist($user);
         $this->entityManager->flush();

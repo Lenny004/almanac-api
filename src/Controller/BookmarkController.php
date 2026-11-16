@@ -85,19 +85,23 @@ final class BookmarkController
     #[Route('/{id}', name: 'show', requirements: ['id' => '\d+'], methods: ['GET'])]
     public function show(#[CurrentUser] User $user, int $id): JsonResponse
     {
-        return new JsonResponse($this->toArray($this->findOwnBookmark($user, $id)));
+        $bookmark = $this->findOwnBookmark($user, $id);
+
+        return new JsonResponse($this->toArray($bookmark));
     }
 
     /**
      * Deletes one of the user's bookmarks.
-     *     * @param User $user the authenticated user, injected by Symfony Security
+     *
+     * @param User $user the authenticated user, injected by Symfony Security
      * @param int $id id of the bookmark from the URL
      * @throws NotFoundHttpException when the user has no bookmark with this id
      */
     #[Route('/{id}', name: 'delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
     public function delete(#[CurrentUser] User $user, int $id): Response
     {
-        $this->bookmarks->remove($this->findOwnBookmark($user, $id));
+        $bookmark = $this->findOwnBookmark($user, $id);
+        $this->bookmarks->remove($bookmark);
 
         return new Response(null, Response::HTTP_NO_CONTENT);
     }

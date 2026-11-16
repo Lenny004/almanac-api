@@ -20,6 +20,19 @@ final class OpenMeteoWeatherSource implements BriefingSourceInterface
     /** The archive lags a few days behind, so recent dates still use the forecast endpoint. */
     private const ARCHIVE_DELAY_DAYS = 5;
 
+    /**
+     * Seconds to wait for the first byte of the answer.
+     */
+    private const REQUEST_TIMEOUT_SECONDS = 5;
+
+    /**
+     * Seconds the whole request may take, download included.
+     */
+    private const MAX_DURATION_SECONDS = 10;
+
+    /**
+     * @param HttpClientInterface $httpClient Symfony HTTP client used to call Open-Meteo
+     */
     public function __construct(
         private readonly HttpClientInterface $httpClient,
     ) {
@@ -30,30 +43,36 @@ final class OpenMeteoWeatherSource implements BriefingSourceInterface
         return 'weather';
     }
 
+    /**
+     * Fetches the daily weather, from the archive for old dates and from the forecast otherwise.
+     *
+     * @return array<string, mixed>
+     * @throws SourceUnavailableException when Open-Meteo fails or returns an unexpected payload
+     */
     public function fetch(\DateTimeImmutable $date): array
     {
-        $day = $date->format('Y-m-d');
-        $archiveLimit = new \DateTimeImmutable(sprintf('-%d days', self::ARCHIVE_DELAY_DAYS));
+        $formattedDate = $date->format('Y-m-d');
+        $archiveLimit = new \DateTimeImmutable(\sprintf('-%d days', self::ARCHIVE_DELAY_DAYS));
         $url = $date < $archiveLimit ? self::ARCHIVE_URL : self::FORECAST_URL;
 
         try {
-            $data = $this->httpClient->request('GET', $url, [
+            $weatherPayload = $this->httpClient->request('GET', $url, [
                 'query' => [
                     'latitude' => self::LATITUDE,
                     'longitude' => self::LONGITUDE,
-                    'start_date' => $day,
-                    'end_date' => $day,
+                    'start_date' => $formattedDate,
+                    'end_date' => $formattedDate,
                     'daily' => 'temperature_2m_max,temperature_2m_min,precipitation_sum',
                     'timezone' => 'auto',
                 ],
-                'timeout' => 5,
-                'max_duration' => 10,
+                'timeout' => self::REQUEST_TIMEOUT_SECONDS,
+                'max_duration' => self::MAX_DURATION_SECONDS,
             ])->toArray();
-        } catch (ExceptionInterface $e) {
-            throw new SourceUnavailableException('Open-Meteo request failed: '.$e->getMessage(), 0, $e);
+        } catch (ExceptionInterface $exception) {
+            throw new SourceUnavailableException('Open-Meteo request failed: '.$exception->getMessage(), 0, $exception);
         }
 
-        $daily = $data['daily'] ?? null;
+        $daily = $weatherPayload['daily'] ?? null;
         if (!\is_array($daily) || !isset($daily['time'][0])) {
             throw new SourceUnavailableException('Open-Meteo returned an unexpected payload.');
         }

@@ -73,7 +73,7 @@ final class BookmarkCreator
      *
      * @param CreateBookmarkRequest $request data sent by the client
      * @param \DateTimeImmutable $date date of the briefing
-     * @return string e.g. "event:11-13:1999:3fa9c2d1", "year:2020" or "apod:2020-11-13"
+     * @return string e.g. "event:11-13:1999:3fa9c2d1", "person:11-13:7b1e04aa", "year:2020" or "apod:2020-11-13"
      */
     private function buildDiscoveryKey(CreateBookmarkRequest $request, \DateTimeImmutable $date): string
     {
@@ -84,13 +84,32 @@ final class BookmarkCreator
                 'event:%s:%d:%s',
                 $date->format('m-d'),
                 (int) $request->eventYear,
-                substr(sha1(trim($request->title)), 0, self::TITLE_HASH_LENGTH),
+                $this->hashTitle($request->title),
+            ),
+            // A person is born on one day and month, and the birth text tells people apart.
+            'person' => \sprintf(
+                'person:%s:%s',
+                $date->format('m-d'),
+                $this->hashTitle($request->title),
             ),
             // The year summary is the same for every date of that year.
             'year' => 'year:'.$date->format('Y'),
             // APOD and weather have one discovery per date.
-            default => $request->type.':'.$date->format('Y-m-d'),
+            'apod', 'weather' => $request->type.':'.$date->format('Y-m-d'),
+            // Never reached: the Validator only accepts CreateBookmarkRequest::TYPES.
+            default => throw new \LogicException(\sprintf('Unknown bookmark type "%s".', $request->type)),
         };
+    }
+
+    /**
+     * @param string $title title sent by the client
+     * @return string the first characters of the title's SHA-1 hash
+     */
+    private function hashTitle(string $title): string
+    {
+        $fullHash = sha1(trim($title));
+
+        return substr($fullHash, 0, self::TITLE_HASH_LENGTH);
     }
 
     /**

@@ -13,14 +13,14 @@ use Symfony\Component\Validator\Context\ExecutionContextInterface;
  */
 final class CreateBookmarkRequest
 {
-    public const TYPES = ['event', 'apod', 'year', 'weather'];
+    public const TYPES = ['event', 'person', 'apod', 'year', 'weather'];
 
     /**
      * Default values let the Validator report missing fields instead of the Serializer failing.
      *
-     * @param string $type kind of discovery: event, apod, year or weather
+     * @param string $type kind of discovery: event, person, apod, year or weather
      * @param string $date date of the briefing, in Y-m-d format
-     * @param string $title short text to show the bookmark
+     * @param string $title short text to show the bookmark; for a person, the text of the birth entry
      * @param string|null $url link to the discovery, when there is one
      * @param int|null $eventYear year of the event, required when the type is "event"
      */
@@ -86,8 +86,13 @@ final class CreateBookmarkRequest
      */
     private function isRealDate(string $date): bool
     {
-        $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        $parsedDate = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
 
-        return false !== $parsed && $parsed->format('Y-m-d') === $date;
+        if (false === $parsedDate) {
+            return false;
+        }
+
+        // "2020-02-31" is parsed as March 2nd, so the date must come back unchanged.
+        return $parsedDate->format('Y-m-d') === $date;
     }
 }

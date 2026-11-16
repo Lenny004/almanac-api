@@ -21,7 +21,6 @@ interface BriefingSourceInterface
      * Fetches and normalizes the data for the given date.
      *
      * @return array<string, mixed>
-     *
      * @throws SourceUnavailableException when the upstream API fails or times out
      */
     public function fetch(\DateTimeImmutable $date): array;

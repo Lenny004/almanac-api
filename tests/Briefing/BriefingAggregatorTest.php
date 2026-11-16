@@ -7,6 +7,7 @@ namespace App\Tests\Briefing;
 use App\Briefing\BriefingAggregator;
 use App\Briefing\Source\ApodSource;
 use App\Briefing\Source\OpenMeteoWeatherSource;
+use App\Briefing\Source\WikipediaBirthsSource;
 use App\Briefing\Source\WikipediaEventsSource;
 use App\Briefing\Source\WikipediaYearSummarySource;
 use PHPUnit\Framework\TestCase;
@@ -27,10 +28,12 @@ final class BriefingAggregatorTest extends TestCase
 
         self::assertSame(self::DATE, $briefing['date']);
         self::assertSame([], $briefing['missing']);
-        self::assertSame(['apod', 'events', 'weather', 'year'], array_keys($briefing['sources']));
+        self::assertSame(['apod', 'events', 'births', 'weather', 'year'], array_keys($briefing['sources']));
         self::assertSame('A fake galaxy', $briefing['sources']['apod']['title']);
         self::assertSame(31.5, $briefing['sources']['weather']['temperatureMax']);
         self::assertCount(1, $briefing['sources']['events']['events']);
+        self::assertCount(1, $briefing['sources']['births']['people']);
+        self::assertSame('A fake person, born before the requested year', $briefing['sources']['births']['people'][0]['text']);
         self::assertSame('2020', $briefing['sources']['year']['title']);
     }
 
@@ -40,7 +43,7 @@ final class BriefingAggregatorTest extends TestCase
 
         self::assertSame(['apod'], $briefing['missing']);
         self::assertArrayNotHasKey('apod', $briefing['sources']);
-        self::assertSame(['events', 'weather', 'year'], array_keys($briefing['sources']));
+        self::assertSame(['events', 'births', 'weather', 'year'], array_keys($briefing['sources']));
     }
 
     public function testANetworkErrorAndABadPayloadAreBothReportedAsMissing(): void
@@ -51,16 +54,25 @@ final class BriefingAggregatorTest extends TestCase
         ]);
 
         self::assertSame(['weather', 'year'], $briefing['missing']);
-        self::assertSame(['apod', 'events'], array_keys($briefing['sources']));
+        self::assertSame(['apod', 'events', 'births'], array_keys($briefing['sources']));
+    }
+
+    public function testOnlyTheRequestedSourcesAreAsked(): void
+    {
+        $briefing = $this->aggregate([], ['apod', 'year']);
+
+        self::assertSame(['apod', 'year'], array_keys($briefing['sources']));
+        self::assertSame([], $briefing['missing']);
     }
 
     /**
      * Builds the aggregator with every source sharing one fake HTTP client and runs it for DATE.
      *
      * @param array<string, MockResponse> $overrides responses that replace the happy path, keyed by a URL fragment
+     * @param list<string>|null $onlySources names of the sources to ask, or null for all of them
      * @return array{date: string, sources: array<string, array<string, mixed>>, missing: list<string>}
      */
-    private function aggregate(array $overrides = []): array
+    private function aggregate(array $overrides = [], ?array $onlySources = null): array
     {
         $responses = array_merge($this->happyResponses(), $overrides);
 
@@ -78,11 +90,12 @@ final class BriefingAggregatorTest extends TestCase
         $aggregator = new BriefingAggregator([
             new ApodSource($client, 'test-key'),
             new WikipediaEventsSource($client),
+            new WikipediaBirthsSource($client),
             new OpenMeteoWeatherSource($client),
             new WikipediaYearSummarySource($client),
         ], new NullLogger());
 
-        return $aggregator->aggregate(new \DateTimeImmutable(self::DATE));
+        return $aggregator->aggregate(new \DateTimeImmutable(self::DATE), $onlySources);
     }
 
     /**
@@ -96,8 +109,15 @@ final class BriefingAggregatorTest extends TestCase
                 'url' => 'https://apod.nasa.gov/apod/image/fake.jpg',
                 'media_type' => 'image',
             ]),
-            'onthisday' => $this->json([
+            'onthisday/events' => $this->json([
                 'events' => [['year' => 1989, 'text' => 'A fake event']],
+            ]),
+            // The second person is born after 2020, so it must not appear in a 2020 briefing.
+            'onthisday/births' => $this->json([
+                'births' => [
+                    ['year' => 2021, 'text' => 'A fake person, born after the requested year'],
+                    ['year' => 1950, 'text' => 'A fake person, born before the requested year'],
+                ],
             ]),
             'open-meteo.com' => $this->json([
                 'daily' => [
