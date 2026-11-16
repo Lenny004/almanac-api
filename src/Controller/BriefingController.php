@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Briefing\BriefingDateRange;
 use App\Briefing\BriefingProvider;
 use App\Http\ProblemResponseFactory;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
@@ -21,12 +22,7 @@ final class BriefingController extends AbstractController
     /**
      * First date with a NASA APOD picture.
      */
-    private const MIN_DATE = '1995-06-16';
-
-    /**
-     * How many days ahead the weather forecast is reliable.
-     */
-    private const MAX_DAYS_AHEAD = 7;
+    private const MIN_DATE = BriefingDateRange::MIN_DATE;
 
     /**
      * @param BriefingProvider       $provider  returns cached or freshly fetched briefings
@@ -67,7 +63,7 @@ final class BriefingController extends AbstractController
 
         $utc = new \DateTimeZone('UTC');
         $day = new \DateTimeImmutable($date, $utc);
-        $max = (new \DateTimeImmutable('today', $utc))->modify(\sprintf('+%d days', self::MAX_DAYS_AHEAD))->format('Y-m-d');
+        $max = BriefingDateRange::maxDate();
 
         // 2. Allowed range: from the first APOD picture to the forecast limit.
         $violations = $this->validator->validate($day, new Assert\Range(

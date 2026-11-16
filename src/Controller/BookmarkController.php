@@ -62,27 +62,55 @@ final class BookmarkController
      * Creates a bookmark from the JSON body.
      *
      * @param User $user the authenticated user, injected by Symfony Security
-     * @param CreateBookmarkRequest $request the JSON body, deserialized and validated by Symfony
+     * @param CreateBookmarkRequest $request the JSON body, deserialized and validated by Symfony; other formats get a 415
      */
     #[Route('', name: 'create', methods: ['POST'])]
-    public function create(#[CurrentUser] User $user, #[MapRequestPayload] CreateBookmarkRequest $request): JsonResponse
+    public function create(#[CurrentUser] User $user, #[MapRequestPayload(acceptFormat: 'json')] CreateBookmarkRequest $request): JsonResponse
     {
         $bookmark = $this->creator->create($user, $request);
 
-        return new JsonResponse($this->toArray($bookmark), Response::HTTP_CREATED);
+        // REST convention: a 201 tells the client where the new resource lives.
+        return new JsonResponse($this->toArray($bookmark), Response::HTTP_CREATED, [
+            'Location' => '/api/bookmarks/'.$bookmark->getId(),
+        ]);
     }
 
     /**
-     * Deletes one of the user's bookmarks.
-     *
-     * Another user's bookmark answers 404, like a missing one, so ids of other users are never revealed.
+     * Shows one of the user's bookmarks; it is the URL returned in the Location header.
      *
      * @param User $user the authenticated user, injected by Symfony Security
      * @param int $id id of the bookmark from the URL
      * @throws NotFoundHttpException when the user has no bookmark with this id
      */
+    #[Route('/{id}', name: 'show', requirements: ['id' => '\d+'], methods: ['GET'])]
+    public function show(#[CurrentUser] User $user, int $id): JsonResponse
+    {
+        return new JsonResponse($this->toArray($this->findOwnBookmark($user, $id)));
+    }
+
+    /**
+     * Deletes one of the user's bookmarks.
+     *     * @param User $user the authenticated user, injected by Symfony Security
+     * @param int $id id of the bookmark from the URL
+     * @throws NotFoundHttpException when the user has no bookmark with this id
+     */
     #[Route('/{id}', name: 'delete', requirements: ['id' => '\d+'], methods: ['DELETE'])]
     public function delete(#[CurrentUser] User $user, int $id): Response
+    {
+        $this->bookmarks->remove($this->findOwnBookmark($user, $id));
+
+        return new Response(null, Response::HTTP_NO_CONTENT);
+    }
+
+    /**
+     * Another user's bookmark answers 404, like a missing one, so ids of other users are never revealed.
+     *
+     * @param User $user the authenticated user
+     * @param int $id id of the bookmark
+     * @return Bookmark the user's bookmark
+     * @throws NotFoundHttpException when the user has no bookmark with this id
+     */
+    private function findOwnBookmark(User $user, int $id): Bookmark
     {
         $bookmark = $this->bookmarks->findOneForUser($id, $user);
 
@@ -90,9 +118,7 @@ final class BookmarkController
             throw new NotFoundHttpException('Bookmark not found.');
         }
 
-        $this->bookmarks->remove($bookmark);
-
-        return new Response(null, Response::HTTP_NO_CONTENT);
+        return $bookmark;
     }
 
     /**

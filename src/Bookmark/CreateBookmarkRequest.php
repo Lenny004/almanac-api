@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Bookmark;
 
+use App\Briefing\BriefingDateRange;
 use Symfony\Component\Validator\Constraints as Assert;
 use Symfony\Component\Validator\Context\ExecutionContextInterface;
 
@@ -30,7 +31,8 @@ final class CreateBookmarkRequest
         #[Assert\NotBlank]
         #[Assert\Date]
         public readonly string $date = '',
-        #[Assert\NotBlank]
+        // The trim normalizer rejects titles made only of spaces.
+        #[Assert\NotBlank(normalizer: 'trim')]
         #[Assert\Length(max: 500)]
         public readonly string $title = '',
         #[Assert\Url(requireTld: true)]
@@ -53,5 +55,39 @@ final class CreateBookmarkRequest
                 ->atPath('eventYear')
                 ->addViolation();
         }
+    }
+
+    /**
+     * Bookmarks accept the same dates as briefings.
+     *
+     * @param ExecutionContextInterface $context where the violation is added
+     */
+    #[Assert\Callback]
+    public function validateDateRange(ExecutionContextInterface $context): void
+    {
+        // An invalid date is already reported by Assert\Date.
+        if (!$this->isRealDate($this->date)) {
+            return;
+        }
+
+        $maxDate = BriefingDateRange::maxDate();
+
+        // Y-m-d strings sort like dates, so a plain string comparison is enough.
+        if ($this->date < BriefingDateRange::MIN_DATE || $this->date > $maxDate) {
+            $context->buildViolation(\sprintf('The date must be between %s and %s.', BriefingDateRange::MIN_DATE, $maxDate))
+                ->atPath('date')
+                ->addViolation();
+        }
+    }
+
+    /**
+     * @param string $date text to check
+     * @return bool true when the text is a real calendar date in Y-m-d format
+     */
+    private function isRealDate(string $date): bool
+    {
+        $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+
+        return false !== $parsed && $parsed->format('Y-m-d') === $date;
     }
 }

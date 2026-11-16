@@ -18,6 +18,11 @@ final class BookmarkCreator
     private const DUPLICATE_MESSAGE = 'This discovery is already bookmarked.';
 
     /**
+     * Characters of the title hash kept in event keys: short, but enough to tell events apart.
+     */
+    private const TITLE_HASH_LENGTH = 8;
+
+    /**
      * @param EntityManagerInterface $entityManager Doctrine entry point to read and save entities
      */
     public function __construct(
@@ -36,7 +41,7 @@ final class BookmarkCreator
     public function create(User $user, CreateBookmarkRequest $request): Bookmark
     {
         $date = new \DateTimeImmutable($request->date, new \DateTimeZone('UTC'));
-        $discoveryKey = $this->buildDiscoveryKey($request->type, $date, $request->eventYear);
+        $discoveryKey = $this->buildDiscoveryKey($request, $date);
 
         if ($this->isAlreadyBookmarked($user, $discoveryKey)) {
             throw new ConflictHttpException(self::DUPLICATE_MESSAGE);
@@ -47,7 +52,7 @@ final class BookmarkCreator
             $request->type,
             $date,
             $discoveryKey,
-            $request->title,
+            trim($request->title),
             $request->url,
             new \DateTimeImmutable('now', new \DateTimeZone('UTC')),
         );
@@ -66,20 +71,25 @@ final class BookmarkCreator
     /**
      * Builds the stable identifier of a discovery.
      *
-     * @param string $type kind of discovery
+     * @param CreateBookmarkRequest $request data sent by the client
      * @param \DateTimeImmutable $date date of the briefing
-     * @param int|null $eventYear year of the event, only for events
-     * @return string e.g. "event:11-13:1999", "year:2020" or "apod:2020-11-13"
+     * @return string e.g. "event:11-13:1999:3fa9c2d1", "year:2020" or "apod:2020-11-13"
      */
-    private function buildDiscoveryKey(string $type, \DateTimeImmutable $date, ?int $eventYear): string
+    private function buildDiscoveryKey(CreateBookmarkRequest $request, \DateTimeImmutable $date): string
     {
-        return match ($type) {
-            // The same event appears on that day every year, so month-day plus event year identify it.
-            'event' => \sprintf('event:%s:%d', $date->format('m-d'), (int) $eventYear),
+        return match ($request->type) {
+            // An event appears on that day every year and several can share a year,
+            // so month-day, event year and a short hash of its text identify it.
+            'event' => \sprintf(
+                'event:%s:%d:%s',
+                $date->format('m-d'),
+                (int) $request->eventYear,
+                substr(sha1(trim($request->title)), 0, self::TITLE_HASH_LENGTH),
+            ),
             // The year summary is the same for every date of that year.
             'year' => 'year:'.$date->format('Y'),
             // APOD and weather have one discovery per date.
-            default => $type.':'.$date->format('Y-m-d'),
+            default => $request->type.':'.$date->format('Y-m-d'),
         };
     }
 
