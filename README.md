@@ -343,28 +343,18 @@ cp .env.example .env.local
 
 ## Design explanation
 
-<!-- Draft: LENNYX to review and adapt in his own words -->
+I chose to use all four suggested APIs. NASA APOD gives the picture of the day, Wikipedia "On This Day" gives historical events and famous people born that day, Open-Meteo gives the weather, and the Wikipedia page summary gives some context about the year. I split events and births into two sources, so a briefing has five sources in total. Births were also my way to support "person" bookmarks.
 
-**APIs.** I used all four suggested APIs, as five sources: NASA APOD, Wikipedia On This Day (events and births as two sources), Open-Meteo (forecast or archive, depending on the date) and the Wikipedia Page Summary of the requested year. Births give the "person" discoveries that users can bookmark.
+I organized the code by feature instead of by technical layer. The `Briefing/` folder has the sources, the aggregator and the cache logic, and the `Bookmark/` folder has the request DTO and the rules to create a bookmark. Controllers and console commands stay thin and only call these services. Every source implements `BriefingSourceInterface`, and Symfony injects all of them into the `BriefingAggregator` automatically, so adding a new source means writing one new class. Each source returns a small normalized array, never the raw response from the upstream API.
 
-**Structure.** The code is organized by feature, not by technical layer: `Briefing/` (sources, aggregator, cache), `Bookmark/` (request DTO and creation rules), plus thin controllers, console commands and entities. Each source implements `BriefingSourceInterface` and is tagged automatically, so the `BriefingAggregator` receives all of them and adding a source means adding one class. A source returns its own normalized array or throws `SourceUnavailableException`; it never returns the raw upstream payload.
+For input, the bookmark body is mapped to a DTO with `#[MapRequestPayload]` and checked with Validator attributes, so bad data never reaches the database. For output, I build simple arrays in the controllers. I didn't use serialization groups because the responses are small and this way is easier to read.
 
-**DTOs and validation.** The bookmark body is turned into a `CreateBookmarkRequest` DTO by the Symfony Serializer (`#[MapRequestPayload]`) and checked with Validator attributes, so invalid input never reaches the database. Responses are small arrays built in the controllers. I preferred this to serialization groups because the output is simple and easy to read.
+In the database, a briefing is one row per date with JSONB columns. I chose JSONB because every source has a different shape and the briefing is always read as a whole. Unique indexes protect the main rules: one briefing per date, and the same discovery can't be bookmarked twice by the same user.
 
-**Database and caching.** A briefing is one row with JSONB columns, because each source has a different shape and the data is always read as a whole. Unique indexes protect the important rules: one briefing per date, and one bookmark per user and discovery. The `BriefingProvider` decides when to call the upstream APIs: complete past dates never, past dates with missing sources only for those sources and at most once per hour, and today or future dates when the copy is older than one hour.
+The caching policy lives in `BriefingProvider`. A complete past date is never fetched again. If a past date has missing sources, only those sources are retried, at most once per hour, and only when someone asks for that date again. Today and future dates are refreshed after one hour, because the forecast can change.
 
-**Upstream errors.** Every request has a timeout. A failing source is logged and listed in `missing`, but the rest of the briefing is still returned. Unexpected exceptions inside a source are caught too, so one bug cannot break the endpoint. All other errors become RFC 7807 responses, mostly through one exception listener.
+For upstream errors, every request has a timeout. If a source fails, I log it and add its name to `missing`, but the rest of the briefing is still returned with status 200. Other errors are returned as RFC 7807 JSON by one exception listener.
 
-**Tradeoffs.**
-- Sources are called one after another. It is simple to read, but a slow day can take several seconds.
-- A bookmark is not checked against the stored briefing; the client sends the title and the API builds a stable key from it.
-- Weather is for one fixed location (San Salvador).
-- Tokens never expire. This is enough for a test project, but not for production.
+I made some tradeoffs. The sources are called one after another, which is simple but can be slow when an API is slow. The weather is always for San Salvador, the city where I live. Bookmarks aren't checked against the stored briefing, and tokens never expire. That's fine for a test project, but not for production.
 
-**With more time I would:**
-- run the upstream calls in parallel with HttpClient's async responses;
-- run the prefetch with Symfony Messenger;
-- add rate limiting with the RateLimiter component;
-- publish OpenAPI documentation;
-- let the client choose the weather location;
-- add token expiry and rotation.
+With more time, I would call the APIs in parallel, run the prefetch with Symfony Messenger, add rate limiting, publish OpenAPI docs and add token expiry.
