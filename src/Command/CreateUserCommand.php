@@ -15,7 +15,6 @@ use Symfony\Component\Validator\Validator\ValidatorInterface;
 
 /**
  * Creates an API user and prints its access token once.
- *
  * Only a hash of the token is stored, so the printed value cannot be recovered later.
  */
 #[AsCommand(name: 'almanac:user:create', description: 'Create an API user and print its access token')]
@@ -44,6 +43,9 @@ final class CreateUserCommand
         SymfonyStyle $io,
         #[Argument(description: 'E-mail of the new user')] string $email,
     ): int {
+        // E-mails are case-insensitive: store them lowercased so Ana@x.com and ana@x.com are the same user.
+        $email = mb_strtolower(trim($email));
+
         $emailError = $this->findEmailError($email);
         if (null !== $emailError) {
             $io->error($emailError);

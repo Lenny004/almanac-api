@@ -44,7 +44,8 @@ class User implements UserInterface
      * Hashes a plain access token the same way it is stored in the database.
      *
      * @param string $plainToken the token the client sends in the Authorization header
-     * @return string the 64-character hex SHA-256 hash */
+     * @return string the 64-character hex SHA-256 hash
+     */
     public static function hashToken(string $plainToken): string
     {
         return hash('sha256', $plainToken);

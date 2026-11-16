@@ -21,6 +21,16 @@ use Symfony\Component\HttpKernel\KernelEvents;
 final class ApiExceptionListener
 {
     /**
+     * Fixed messages for common errors, so internal details (like full URLs) never reach the client.
+     */
+    private const DETAILS = [
+        Response::HTTP_UNAUTHORIZED => 'A valid access token is required.',
+        Response::HTTP_FORBIDDEN => 'You are not allowed to access this resource.',
+        Response::HTTP_NOT_FOUND => 'The requested resource was not found.',
+        Response::HTTP_METHOD_NOT_ALLOWED => 'This HTTP method is not allowed for this resource.',
+    ];
+
+    /**
      * @param ProblemResponseFactory $problems builds the RFC 7807 responses
      */
     public function __construct(
@@ -30,6 +40,8 @@ final class ApiExceptionListener
 
     /**
      * Replaces the error response for API requests.
+     *
+     * @param ExceptionEvent $event the event holding the request and the thrown exception
      */
     public function __invoke(ExceptionEvent $event): void
     {
@@ -40,12 +52,12 @@ final class ApiExceptionListener
         $exception = $event->getThrowable();
 
         if ($exception instanceof HttpExceptionInterface) {
-            // Known HTTP errors (404 route not found, 405 method not allowed...): keep their status.
+            // Known HTTP errors (401, 404, 405...): keep their status and headers (e.g. Allow: GET).
             $status = $exception->getStatusCode();
             $response = $this->problems->create(
                 $status,
                 Response::$statusTexts[$status] ?? 'Error',
-                '' !== $exception->getMessage() ? $exception->getMessage() : null,
+                self::DETAILS[$status] ?? ('' !== $exception->getMessage() ? $exception->getMessage() : null),
             );
             $response->headers->add($exception->getHeaders());
         } else {
@@ -55,6 +67,11 @@ final class ApiExceptionListener
                 'Internal Server Error',
                 'An unexpected error occurred.',
             );
+        }
+
+        // RFC 6750: every 401 tells the client which authentication scheme to use.
+        if (Response::HTTP_UNAUTHORIZED === $response->getStatusCode() && !$response->headers->has('WWW-Authenticate')) {
+            $response->headers->set('WWW-Authenticate', 'Bearer');
         }
 
         $event->setResponse($response);
